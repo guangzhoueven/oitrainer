@@ -174,6 +174,37 @@ function handleEventChoice(event) {
   safeRenderAll();
 }
 
+// 预览用天赋触发：触发前后对学生状态做快照与还原，
+// 保证压力预览没有任何副作用（例如临时改动知识、消耗一次性触发标记）
+function triggerTalentsForPreview(student, eventName, ctx){
+  const knowledgeKeys = ['knowledge_ds','knowledge_graph','knowledge_string','knowledge_math','knowledge_dp'];
+  const snap = {
+    pressure: student.pressure,
+    thinking: student.thinking,
+    coding: student.coding,
+    mental: student.mental,
+    talents: (student.talents instanceof Set) ? new Set(student.talents) : student.talents,
+    talentState: (student._talent_state && typeof student._talent_state === 'object') ? Object.assign({}, student._talent_state) : student._talent_state,
+    tempModifiers: (student._temp_modifiers && typeof student._temp_modifiers === 'object') ? Object.assign({}, student._temp_modifiers) : student._temp_modifiers,
+    knowledge: {}
+  };
+  for(const k of knowledgeKeys) snap.knowledge[k] = student[k];
+  try{
+    return student.triggerTalents(eventName, ctx) || [];
+  } finally {
+    try{
+      student.pressure = snap.pressure;
+      student.thinking = snap.thinking;
+      student.coding = snap.coding;
+      student.mental = snap.mental;
+      for(const k of knowledgeKeys) student[k] = snap.knowledge[k];
+      if(snap.talents !== student.talents) student.talents = snap.talents;
+      student._talent_state = snap.talentState;
+      student._temp_modifiers = snap.tempModifiers;
+    }catch(e){ /* 还原失败不影响预览 */ }
+  }
+}
+
 // 压力预计算函数：用于在训练前预测压力变化
 function calculateTrainingPressure(task, intensity) {
   try {
@@ -183,6 +214,7 @@ function calculateTrainingPressure(task, intensity) {
     
     let hasQuitRisk = false;
     let hasHighPressure = false;
+    let maxPredictedPressure = 0;
     
     for(let s of game.students) {
       if(!s || s.active === false) continue;
@@ -217,17 +249,17 @@ function calculateTrainingPressure(task, intensity) {
       
       pressure_increase *= (typeof PRESSURE_INCREASE_MULTIPLIER !== 'undefined' ? PRESSURE_INCREASE_MULTIPLIER : 1.0);
       
-      // 考虑天赋的压力修正
+      // 考虑天赋的压力修正（预览走 triggerTalentsForPreview：无副作用、且随机类天赋不触发）
       let finalPressureIncrease = pressure_increase;
       try{
         if(typeof s.triggerTalents === 'function'){
-          const talentResults = s.triggerTalents('pressure_change', { 
+          const talentResults = triggerTalentsForPreview(s, 'pressure_change', { 
             source: 'task_training', 
             amount: pressure_increase, 
             task: task, 
             intensity: intensity,
-            preview: true  // 标记为预览模式
-          }) || [];
+            preview: true  // 标记为预览模式：随机类天赋（摸鱼大师、厌学等）不触发，保证提示文案稳定
+          });
           
           for(const r of talentResults){
             if(!r || !r.result) continue;
@@ -240,13 +272,23 @@ function calculateTrainingPressure(task, intensity) {
                 finalPressureIncrease = finalPressureIncrease * 0.5;
               } else if(act === 'double_pressure'){
                 finalPressureIncrease = finalPressureIncrease * 2.0;
+              } else if(act === 'reduce_pressure'){
+                finalPressureIncrease = finalPressureIncrease * Math.max(0, 1 - (Number(out.amount) || 0));
+              } else if(act === 'increase_pressure'){
+                finalPressureIncrease = finalPressureIncrease * (1 + (Number(out.amount) || 0));
+              } else if(act === 'reject_training'){
+                // 与实际训练一致：训练无效改为固定压力+15
+                finalPressureIncrease = 15;
               }
             }
           }
         }
       }catch(e){ /* ignore */ }
       
-      const predictedPressure = s.pressure + finalPressureIncrease;
+      let predictedPressure = s.pressure + finalPressureIncrease;
+      // 与实际结算一致：事件遗留的压力修正也要计入预测
+      if(typeof s.pressure_modifier === 'number') predictedPressure += s.pressure_modifier;
+      if(predictedPressure > maxPredictedPressure) maxPredictedPressure = predictedPressure;
       
       // 检查退队风险：
       // 1. 如果预测压力>=90，且学生已有退队倾向（quit_tendency_weeks >= 1），下周将退队
@@ -270,11 +312,12 @@ function calculateTrainingPressure(task, intensity) {
     
     return {
       hasQuitRisk: hasQuitRisk,
-      hasHighPressure: hasHighPressure
+      hasHighPressure: hasHighPressure,
+      maxPredictedPressure: maxPredictedPressure
     };
   } catch(e) {
     console.error('calculateTrainingPressure error', e);
-    return { hasQuitRisk: false, hasHighPressure: false };
+    return { hasQuitRisk: false, hasHighPressure: false, maxPredictedPressure: 0 };
   }
 }
 
