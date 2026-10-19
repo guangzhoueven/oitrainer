@@ -218,7 +218,18 @@
       if (!speechText) return;
 
       // 触发训话事件
-      const hash = CryptoJS.SHA256(speechText).toString(CryptoJS.enc.Hex);
+      // CryptoJS 来自 CDN：离线或加载失败时用轻量哈希兜底，保证训话功能可用（彩蛋除外）
+      let hash = '';
+      try {
+        hash = CryptoJS.SHA256(speechText).toString(CryptoJS.enc.Hex);
+      } catch (err) {
+        let h = 0x811c9dc5;
+        for (let i = 0; i < speechText.length; i++) {
+          h ^= speechText.charCodeAt(i);
+          h = Math.imul(h, 0x01000193);
+        }
+        hash = (h >>> 0).toString(16).padStart(8, '0');
+      }
       document.dispatchEvent(new CustomEvent('coach-speech', {
         detail: {
           text: speechText,

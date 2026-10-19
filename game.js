@@ -66,7 +66,7 @@ function __createSnapshot(){
       knowledge_string: Number((s.knowledge_string||0).toFixed(2)),
       knowledge_math: Number((s.knowledge_math||0).toFixed(2)),
       knowledge_dp: Number((s.knowledge_dp||0).toFixed(2)),
-      knowledge: Number(s.getKnowledgeTotal?.() || ((s.knowledge_ds||0)+(s.knowledge_graph||0)+(s.knowledge_string||0)+(s_knowledge_math||0)+(s.knowledge_dp||0)))
+      knowledge: Number(s.getKnowledgeTotal?.() || ((s.knowledge_ds||0)+(s.knowledge_graph||0)+(s.knowledge_string||0)+(s.knowledge_math||0)+(s.knowledge_dp||0)))
     }))
   };
 }
@@ -328,26 +328,12 @@ function trainStudentsWithTask(task, intensity) {
     
     const intensityFactor = intensity === 1 ? 0.7 : intensity === 3 ? 1.3 : 1.0;
     
-    // 应用知识点增加：基础效率加成 + 资料库加成 + 强度系数 + 生病惩罚
-    for(const boost of results.boosts) {
-      // 计算总的知识点增加（包含所有加成因素）
-      const totalBoost = Math.floor(boost.actualAmount * libraryMultiplier * intensityFactor * sick_penalty);
-      s.addKnowledge(boost.type, totalBoost);
-      // 更新 actualAmount 为实际增加量，以便日志正确显示
-      boost.actualAmount = totalBoost;
-    }
-    
-    /* 计算机：训练效果（思维/代码）乘区 */
-    const computerMultiplier = game.facilities.getComputerMultiplier();
-    
-    const abilityGainBase = boostMultiplier * intensityFactor * (1 - Math.min(0.6, s.pressure/200.0));
-    const thinkingGain = uniform(0.6, 1.5) * abilityGainBase * computerMultiplier * (typeof TRAINING_EFFECT_MULTIPLIER !== 'undefined' ? TRAINING_EFFECT_MULTIPLIER : 1.0);
-    const codingGain = uniform(1, 2.5) * abilityGainBase * computerMultiplier * (typeof TRAINING_EFFECT_MULTIPLIER !== 'undefined' ? TRAINING_EFFECT_MULTIPLIER : 1.0);
-    
-    s.thinking += thinkingGain;
-    s.coding += codingGain;
-    s.thinking = (s.thinking || 0);
-    s.coding = (s.coding || 0);
+    // --- 先触发 pressure_change 天赋，拿到对压力/增益的修正，再应用收益 ---
+    // talentGainRatio: 对本次知识与能力增益的总体乘区；knowledgeGainRatio: 仅对知识增益
+    let talentGainRatio = 1.0;
+    let knowledgeGainRatio = 1.0;
+    let rejectTraining = false;
+    let finalPressureIncrease = 0;
     
     let base_pressure = (intensity===1) ? 15 : (intensity===2) ? 25 : 40;
     
@@ -362,7 +348,7 @@ function trainStudentsWithTask(task, intensity) {
     
     pressure_increase *= (typeof PRESSURE_INCREASE_MULTIPLIER !== 'undefined' ? PRESSURE_INCREASE_MULTIPLIER : 1.0);
     
-    let finalPressureIncrease = pressure_increase;
+    finalPressureIncrease = pressure_increase;
     try{
       if(typeof s.triggerTalents === 'function'){
         const talentResults = s.triggerTalents('pressure_change', { 
@@ -379,15 +365,54 @@ function trainStudentsWithTask(task, intensity) {
             const act = out.action;
             if(act === 'moyu_cancel_pressure'){
               finalPressureIncrease = 0;
+              if(typeof out.reduceKnowledgeRatio === 'number'){
+                knowledgeGainRatio *= Math.max(0, 1 - out.reduceKnowledgeRatio);
+              }
             } else if(act === 'halve_pressure'){
               finalPressureIncrease = finalPressureIncrease * 0.5;
             } else if(act === 'double_pressure'){
               finalPressureIncrease = finalPressureIncrease * 2.0;
+            } else if(act === 'reduce_pressure'){
+              finalPressureIncrease = finalPressureIncrease * Math.max(0, 1 - (Number(out.amount) || 0));
+            } else if(act === 'increase_pressure'){
+              finalPressureIncrease = finalPressureIncrease * (1 + (Number(out.amount) || 0));
+            } else if(act === 'reduce_all_gain'){
+              talentGainRatio *= Math.max(0, 1 - (Number(out.amount) || 0));
+            } else if(act === 'reject_training'){
+              // 厌学：本次训练无效，改为固定压力+15
+              rejectTraining = true;
+              finalPressureIncrease = 15;
             }
           }
         }
       }
     }catch(e){ console.error('triggerTalents pressure_change', e); }
+    
+    // 应用知识点增加：基础效率加成 + 资料库加成 + 强度系数 + 生病惩罚（+ 天赋修正）
+    for(const boost of results.boosts) {
+      // 计算总的知识点增加（包含所有加成因素）
+      let totalBoost = boost.actualAmount * libraryMultiplier * intensityFactor * sick_penalty * talentGainRatio * knowledgeGainRatio;
+      if(rejectTraining) totalBoost = 0;
+      totalBoost = Math.floor(totalBoost);
+      s.addKnowledge(boost.type, totalBoost);
+      // 更新 actualAmount 为实际增加量，以便日志正确显示
+      boost.actualAmount = totalBoost;
+    }
+    
+    /* 计算机：训练效果（思维/代码）乘区 */
+    const computerMultiplier = game.facilities.getComputerMultiplier();
+    
+    const abilityGainBase = boostMultiplier * intensityFactor * (1 - Math.min(0.6, s.pressure/200.0));
+    let thinkingGain = uniform(0.6, 1.5) * abilityGainBase * computerMultiplier * (typeof TRAINING_EFFECT_MULTIPLIER !== 'undefined' ? TRAINING_EFFECT_MULTIPLIER : 1.0);
+    let codingGain = uniform(1, 2.5) * abilityGainBase * computerMultiplier * (typeof TRAINING_EFFECT_MULTIPLIER !== 'undefined' ? TRAINING_EFFECT_MULTIPLIER : 1.0);
+    thinkingGain *= talentGainRatio;
+    codingGain *= talentGainRatio;
+    if(rejectTraining){ thinkingGain = 0; codingGain = 0; }
+    
+    s.thinking += thinkingGain;
+    s.coding += codingGain;
+    s.thinking = (s.thinking || 0);
+    s.coding = (s.coding || 0);
     
     // 应用事件产生的临时压力修正值
     let totalPressureChange = finalPressureIncrease;
@@ -579,12 +604,36 @@ function outingTrainingWithSelection(difficulty_choice, province_choice, selecte
     s.coding = (s.coding || 0) + ability_gain;
     s.mental = Math.min(100, s.mental + ability_gain * 0.5);
 
-    const pressure_delta = Math.floor(pressure_gain * (mismatch ? pressure_multiplier : 1.0) * (typeof PRESSURE_INCREASE_MULTIPLIER !== 'undefined' ? PRESSURE_INCREASE_MULTIPLIER : 1.0));
+    let pressure_delta = Math.floor(pressure_gain * (mismatch ? pressure_multiplier : 1.0) * (typeof PRESSURE_INCREASE_MULTIPLIER !== 'undefined' ? PRESSURE_INCREASE_MULTIPLIER : 1.0));
+    
+    // 应用外出集训相关的压力修正天赋（如 高原反应 double_pressure / 水土不服 等）
+    try{
+      const outingTalentResults = s.triggerTalents?.('pressure_change', { source: 'outing', amount: pressure_delta, province: target?.name, difficulty_choice }) || [];
+      for(const r of outingTalentResults){
+        if(!r || !r.result) continue;
+        const out = r.result;
+        if(typeof out === 'object' && out.action === 'double_pressure'){
+          pressure_delta = pressure_delta * 2.0;
+          if(typeof log === 'function' && out.message) log(`${s.name}：${out.message}`);
+        } else if(typeof out === 'string'){
+          if(typeof log === 'function') log(`${s.name}：${out}`);
+        }
+      }
+    }catch(e){ console.error('outing pressure_change talents', e); }
+    
     s.pressure = Math.min(100, Number(s.pressure||0) + pressure_delta);
     s.comfort -= 10;
 
-    s.triggerTalents?.('pressure_change', { source: 'outing', amount: pressure_delta, province: target?.name, difficulty_choice });
-    s.triggerTalents?.('outing_finished', { province: target?.name, difficulty: difficulty_choice, knowledge_gain });
+    try{
+      const outingResults = s.triggerTalents?.('outing_finished', { province: target?.name, difficulty: difficulty_choice, knowledge_gain }) || [];
+      for(const r of outingResults){
+        if(!r || !r.result) continue;
+        if(typeof r.result === 'string'){
+          if(typeof log === 'function') log(`${s.name}：${r.result}`);
+        }
+        // reduce_outing_cost 已在 outing_cost_calculate 阶段统一处理，此处不再重复减免
+      }
+    }catch(e){ console.error('outing_finished talents', e); }
     s.hiddenMockScore = hiddenScore;
 
     try{
@@ -689,7 +738,7 @@ function weeklyUpdate(weeks=1){
   for(let s of game.students){
     if(!s || s.active === false) continue;
     if(s.sick_weeks > 0){
-      s.sick_weeks--;
+      s.sick_weeks = Math.max(0, s.sick_weeks - weeks);
       if(s.talents && s.talents.has('自愈') && s.sick_weeks > 0){
         if(getRandom() < 0.30){
           s.sick_weeks = Math.max(0, s.sick_weeks - 1);
@@ -722,9 +771,10 @@ function weeklyUpdate(weeks=1){
     }
     
     // 应用事件产生的临时修正值
-    if(typeof s.comfort_modifier === 'number'){
+    if(typeof s.comfort_modifier === 'number' && s.comfort_modifier !== 0){
       personalComfort += s.comfort_modifier;
       personalComfort = Math.max(0, Math.min(100, personalComfort));
+      s.comfort_modifier = 0; // 周结算后清除舒适度修正（已应用）
     }
     
     let pressure_recovery = RECOVERY_RATE * (personalComfort/100.0) * weeks;
@@ -1065,15 +1115,43 @@ function rest1Week(){
   renderAll();
 }
 
+// 序列化游戏状态：把 Set 转成数组，避免 JSON.stringify 丢失数据
+function serializeGameState(){
+  return JSON.stringify(game, (key, value) => {
+    if(value instanceof Set){
+      return Array.from(value);
+    }
+    return value;
+  });
+}
+
+// 还原存档中的 Set 字段（completedCompetitions / qualification / fundingIssued / talents）
+function reviveSaveData(o){
+  if(!o || typeof o !== 'object') return o;
+  if(!(o.completedCompetitions instanceof Set)){
+    o.completedCompetitions = new Set(Array.isArray(o.completedCompetitions) ? o.completedCompetitions : []);
+  }
+  if(o.fundingIssued && !(o.fundingIssued instanceof Set)){
+    o.fundingIssued = new Set(Array.isArray(o.fundingIssued) ? o.fundingIssued : []);
+  }
+  if(o.qualification && typeof o.qualification === 'object'){
+    for(const half of Object.keys(o.qualification)){
+      const halfData = o.qualification[half];
+      if(halfData && typeof halfData === 'object'){
+        for(const comp of Object.keys(halfData)){
+          if(!(halfData[comp] instanceof Set)){
+            halfData[comp] = new Set(Array.isArray(halfData[comp]) ? halfData[comp] : []);
+          }
+        }
+      }
+    }
+  }
+  return o;
+}
+
 function saveGame(silent = false){ 
   try{
-    const saveData = JSON.parse(JSON.stringify(game, (key, value) => {
-      if(value instanceof Set){
-        return Array.from(value);
-      }
-      return value;
-    }));
-  const savedStr = JSON.stringify(saveData);
+    const savedStr = serializeGameState();
   try{ sessionStorage.setItem('oi_coach_save', savedStr); }catch(e){ console.warn('sessionStorage unavailable for save', e); }
   try{ sessionStorage.setItem('oi_coach_save_diag', savedStr); }catch(e){}
   try{ localStorage.setItem('oi_coach_save', savedStr); }catch(e){}
@@ -1117,6 +1195,7 @@ function loadGame(){ try{
     }
     return student;
   });
+  reviveSaveData(game);
   
   // 恢复本周题目：如果存档中没有或已失效，重新选择（基础7道+资料库额外题目）
   if (!game.weeklyTasks || !Array.isArray(game.weeklyTasks) || game.weeklyTasks.length === 0) {
@@ -1132,7 +1211,7 @@ function silentLoad(){ try{
   let raw = null;
   try{ raw = sessionStorage.getItem('oi_coach_save'); }catch(e){ raw = null; }
   try{ if(!raw) raw = localStorage.getItem('oi_coach_save'); }catch(e){}
-  if(!raw) return false; let o = JSON.parse(raw); game = Object.assign(new GameState(), o); window.game = game; game.facilities = Object.assign(new Facilities(), o.facilities); if(typeof o.facilities.dorm !== 'undefined' && typeof o.facilities.fan === 'undefined'){ game.facilities.fan = Math.min(o.facilities.dorm || 0, FACILITY_DEFS.fan.maxLevel); } if(typeof o.facilities.canteen !== 'undefined' && typeof o.facilities.network === 'undefined'){ game.facilities.network = 0; } game.facilities.computer_room = 1; game.students = (o.students || []).map(s => { const student = Object.assign(new Student(), s); if(s.talents && Array.isArray(s.talents)){ student.talents = new Set(s.talents); } else if(s.talents && typeof s.talents === 'object'){ student.talents = new Set(Object.keys(s.talents).filter(k => s.talents[k])); } return student; }); 
+  if(!raw) return false; let o = JSON.parse(raw); game = Object.assign(new GameState(), o); window.game = game; game.facilities = Object.assign(new Facilities(), o.facilities); if(typeof o.facilities.dorm !== 'undefined' && typeof o.facilities.fan === 'undefined'){ game.facilities.fan = Math.min(o.facilities.dorm || 0, FACILITY_DEFS.fan.maxLevel); } if(typeof o.facilities.canteen !== 'undefined' && typeof o.facilities.network === 'undefined'){ game.facilities.network = 0; } game.facilities.computer_room = 1; game.students = (o.students || []).map(s => { const student = Object.assign(new Student(), s); if(s.talents && Array.isArray(s.talents)){ student.talents = new Set(s.talents); } else if(s.talents && typeof s.talents === 'object'){ student.talents = new Set(Object.keys(s.talents).filter(k => s.talents[k])); } return student; }); reviveSaveData(game);
   
   // 恢复本周题目：如果存档中没有或已失效，重新选择（基础7道+资料库额外题目）
   if (!game.weeklyTasks || !Array.isArray(game.weeklyTasks) || game.weeklyTasks.length === 0) {
@@ -1345,7 +1424,7 @@ window.onload = ()=>{
         initGame(diff, prov, count);
       }
       
-      try{ localStorage.setItem('oi_coach_save', JSON.stringify(game)); }catch(e){}
+      try{ localStorage.setItem('oi_coach_save', serializeGameState()); }catch(e){}
     } else {
       const ok = silentLoad();
       if(!ok){ window.location.href = 'start.html'; return; }
@@ -1364,7 +1443,11 @@ window.onload = ()=>{
       };
     });
     const actionEvictBtn = document.getElementById('action-evict');
-    if(actionEvictBtn) actionEvictBtn.onclick = ()=>{ evictStudentUI(); };
+    if(actionEvictBtn) actionEvictBtn.onclick = ()=>{
+      // evictStudentUI 在部分版本中不存在，避免 ReferenceError：统一用学生卡片上的「劝退」按钮
+      if(typeof evictStudentUI === 'function') evictStudentUI();
+      else alert('请在学生卡片上点击「劝退」按钮移除学生');
+    };
     
     // showFacilityUpgradeModal 已在 lib/facilities.js 中暴露到全局
     // 暴露压力预计算函数到全局作用域
