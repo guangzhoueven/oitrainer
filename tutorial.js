@@ -50,7 +50,7 @@ const TUTORIAL_STEPS = [
     // 目标改为整个设施状态模块，使遮罩高亮覆盖完整区域
     target: '#facilities-panel',
     title: '设施状态',
-    content: '这里显示当前的设施等级。升级<strong>计算机</strong>和<strong>资料库</strong>可以提升训练效率。<br>升级<strong>空调、宿舍、食堂</strong>可以改善舒适度，降低压力。<br>设施可以通过特定事件（如上级拨款）进行升级。',
+    content: '这里显示当前的设施等级。升级<strong>计算机</strong>和<strong>资料库</strong>可以提升训练效率。<br>升级<strong>空调、宿舍、食堂</strong>可以改善舒适度，降低压力。<br>点击本区域右上角的<strong>「升级设施」</strong>按钮可随时升级；上级拨款、比赛拨款等事件也会提供升级入口。',
     position: 'right',
     highlight: true
   },

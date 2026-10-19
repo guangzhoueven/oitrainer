@@ -1442,6 +1442,13 @@ window.onload = ()=>{
         if(fac) upgradeFacility(fac);
       };
     });
+    // 设施升级常驻入口：任何时候都可以升级，不再只能等上级拨款/比赛拨款事件提供入口
+    const upgradeFacilityBtn = document.getElementById('btn-upgrade-facility');
+    if(upgradeFacilityBtn) upgradeFacilityBtn.onclick = ()=>{
+      if(typeof window.showFacilityUpgradeModal === 'function') window.showFacilityUpgradeModal();
+      else alert('设施升级界面未加载，请刷新页面');
+    };
+    
     const actionEvictBtn = document.getElementById('action-evict');
     if(actionEvictBtn) actionEvictBtn.onclick = ()=>{
       // evictStudentUI 在部分版本中不存在，避免 ReferenceError：统一用学生卡片上的「劝退」按钮
