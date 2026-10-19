@@ -605,7 +605,9 @@ function renderAll(){
         if(typeof window.holdCompetitionModalNew === 'function'){
           window.holdCompetitionModalNew(compNow);
         } else {
-          holdCompetitionModal(compNow);
+          // 旧版 holdCompetitionModal 已移除，仅作兜底提示
+          console.error('比赛系统未加载（holdCompetitionModalNew 不存在）');
+          if(typeof alert === 'function') alert('比赛系统未加载，请刷新页面');
         }
       };
       const eventContainer = document.getElementById('event-cards-container');
@@ -774,8 +776,11 @@ function trainStudentsUI(){
   const valueDisplay = document.getElementById('intensity-value');
   
   // 自定义滑块样式（适配不同浏览器）
-  const style = document.createElement('style');
-  style.textContent = `
+  // 使用固定 id 复用，避免每次打开弹窗都向 <head> 追加新的 <style> 造成样式表泄漏
+  if(!document.getElementById('intensity-slider-style')){
+    const style = document.createElement('style');
+    style.id = 'intensity-slider-style';
+    style.textContent = `
     #intensity-slider::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
@@ -805,7 +810,8 @@ function trainStudentsUI(){
       border-radius: 4px;
     }
   `;
-  document.head.appendChild(style);
+    document.head.appendChild(style);
+  }
 
   function updateIntensityWarning() {
     const intensity = parseInt(slider.value);
@@ -1041,7 +1047,7 @@ function entertainmentUI(){
     {id:1,label:'放假',desc:'减小少许压力',cost:0},
     {id:2,label:`请学生吃饭 (¥${ENTERTAINMENT_COST_MEAL})`,desc:'补充能量,减小一定压力',cost:ENTERTAINMENT_COST_MEAL},
     {id:3,label:'体育运动',desc:`减小一定压力,注意天气影响，当前是${game.getWeatherDescription()}天`,cost:0},
-    {id:5,label:`邀请学生打游戲`,desc:'适度减压,有可能提升学生能力',cost:ENTERTAINMENT_COST_CS}
+    {id:5,label:`邀请学生打游戏`,desc:'适度减压,有可能提升学生能力',cost:ENTERTAINMENT_COST_CS}
   ];
   let cardsHtml = opts.map(o=>`
     <div class="prov-card option-card" data-id="${o.id}" style="min-width:120px;border:1px solid #ddd;padding:8px;border-radius:6px;cursor:pointer;">
@@ -1066,7 +1072,7 @@ function entertainmentUI(){
     if(opt.id === 5 && game.facilities.computer < 3){ alert("需要计算机等级 ≥ 3"); return; }
   const costAdj = Math.round(cost * (game.getExpenseMultiplier ? game.getExpenseMultiplier() : 1));
   if(game.budget < costAdj){ alert("经费不足"); return; }
-  game.recordExpense(costAdj, `娱乐活动：${opt.val}`);
+  game.recordExpense(costAdj, `娱乐活动：${opt.label}`);
     closeModal();
       for(let s of game.students){
         if(!s || s.active === false) continue;
@@ -1082,7 +1088,7 @@ function entertainmentUI(){
         s.mental = Math.min(100, s.mental);
         try{
           if(typeof s.triggerTalents === 'function'){
-            const results = s.triggerTalents('entertainment_finished', { entertainmentId: opt.id, entertainmentName: opt.val, cost: opt.cost }) || [];
+            const results = s.triggerTalents('entertainment_finished', { entertainmentId: opt.id, entertainmentName: opt.label, cost: opt.cost }) || [];
             for(const r of results){ if(!r || !r.result) continue; const out = r.result; if(typeof out === 'object'){
               if(out.action === 'quit_for_esports'){
                 s.active = false; s._quit_for_esports = true;
