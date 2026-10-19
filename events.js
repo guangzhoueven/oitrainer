@@ -149,10 +149,14 @@
             
             // 压力>=90时获得或持续退队倾向
             if(s.pressure >= 90){
-              // 初始化退队倾向周数
+              // 初始化退队倾向周数（按"周"而非"检查次数"累计，避免同一周多次检查导致重复计数）
               if(!s.quit_tendency_weeks) s.quit_tendency_weeks = 0;
-              
-              s.quit_tendency_weeks = (s.quit_tendency_weeks || 0) + 1;
+              const lastTendencyWeek = Number(s.quit_tendency_last_week) || -1;
+              const isNewTendencyWeek = (lastTendencyWeek !== c.game.week);
+              if(isNewTendencyWeek){
+                s.quit_tendency_weeks = (s.quit_tendency_weeks || 0) + 1;
+                s.quit_tendency_last_week = c.game.week;
+              }
               
               // 调试日志
               if(typeof console !== 'undefined' && console.log){
@@ -160,22 +164,20 @@
               }
               
               // 如果退队倾向持续1周以上，则执行退队
-              if(s.quit_tendency_weeks > 1){
+              if(s.quit_tendency_weeks > 1 && getRandom() < (function(){
                 let prob = QUIT_PROB_BASE + QUIT_PROB_PER_EXTRA_PRESSURE * (s.pressure - 90);
-                
                 // 检测乐天派天赋：燃尽概率降低50%
                 if(s.talents && s.talents.has('乐天派')){
                   prob = prob * 0.5;
                 }
-                
-                if(getRandom() < prob){
+                return prob;
+              })){
                   quitList.push(s.name);
                   c.game.students.splice(i, 1);
                   c.game.quit_students = (c.game.quit_students||0) + 1;
                   c.game.reputation = Math.max(0, c.game.reputation - 10);
                   try{ if(typeof s.triggerTalents === 'function'){ s.triggerTalents('quit', { reason: 'burnout' }); } }catch(e){ console.error('triggerTalents quit', e); }
-                }
-              } else if(s.quit_tendency_weeks === 1) {
+              } else if(s.quit_tendency_weeks === 1 && isNewTendencyWeek) {
                 // 刚刚获得退队倾向
                 tendencyList.push(s.name);
               }
@@ -187,6 +189,7 @@
                   console.log(`[退队清除] ${s.name}: 压力=${s.pressure}, 清除退队倾向`);
                 }
                 s.quit_tendency_weeks = 0;
+                s.quit_tendency_last_week = 0;
               }
             }
           }
@@ -487,9 +490,14 @@
         check: c => {
           const fac = c.game.facilities;
           const noCooling = (!fac || (fac.fan === 0 && fac.ac === 0));
-          return noCooling && ['summer', 'autumn'].includes(c.game.season) && c.game.temperature > 30;
+          const hot = noCooling && ['summer', 'autumn'].includes(c.game.season) && c.game.temperature > 30;
+          if(!hot) return false;
+          // 同一高温期最多触发一次，避免每周连发
+          if(c.game.heatStrokeWeek && (c.game.week - c.game.heatStrokeWeek) < 4) return false;
+          return getRandom() < 0.35;
         },
         run: c => {
+          c.game.heatStrokeWeek = c.game.week;
           const weeks = c.utils.uniformInt(1, 2);
           c.game.food_sick_weeks = weeks;
           for (const s of c.game.students) {
@@ -684,8 +692,16 @@
         id: 'media_interview',
         name: '媒体采访请求',
         description: '采访后可选择高调或低调',
-        check: c => c.game.recentMedal && getRandom() < 0.5,
+        check: c => {
+          // 只在最近 6 周内获得过奖牌时才有机会触发，且同一波热度最多采访一次
+          if(!c.game.recentMedal) return false;
+          const medalWeek = Number(c.game.recentMedalWeek) || 0;
+          if(medalWeek <= 0 || (c.game.week - medalWeek) > 6) return false;
+          if(c.game.mediaInterviewDoneWeek && (c.game.week - c.game.mediaInterviewDoneWeek) <= 6) return false;
+          return getRandom() < 0.25;
+        },
         run: c => {
+          c.game.mediaInterviewDoneWeek = c.game.week;
           const options = [
             { label: '高调宣传', effect: () => {
                 c.game.reputation = Math.min(100, c.game.reputation + 10);
