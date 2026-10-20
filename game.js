@@ -926,6 +926,9 @@ function weeklyUpdate(weeks=1){
     return;
   }
   
+  // 成就检查（每周结算后；内部全程 try/catch，绝不影响游戏本体）
+  try{ if(window.AchievementManager) window.AchievementManager.check(game); }catch(e){}
+
   renderAll();
 }
 
@@ -1091,6 +1094,9 @@ function triggerGameEnding(reason) {
   try{ console.debug('triggerGameEnding 设置 oi_coach_ending_reason = ' + normalized); }catch(e){}
   try{ sessionStorage.setItem('oi_coach_ending_reason', normalized); }catch(e){ console.warn('sessionStorage unavailable for ending_reason', e); }
   try{ localStorage.setItem('oi_coach_ending_reason', normalized); }catch(e){ /* ignore localStorage write failures */ }
+
+    // 结算前做最后一次成就检查（如「完整赛季」等结算类成就）
+    try{ if(window.AchievementManager) window.AchievementManager.check(game); }catch(e){}
     
     setTimeout(() => {
       try { 
@@ -1490,6 +1496,12 @@ window.onload = ()=>{
     if(upgradeFacilityBtn) upgradeFacilityBtn.onclick = ()=>{
       if(typeof window.showFacilityUpgradeModal === 'function') window.showFacilityUpgradeModal();
       else alert('设施升级界面未加载，请刷新页面');
+    };
+    // 存档管理入口：查看当前存档、导出/导入加密存档文件
+    const saveManagerBtn = document.getElementById('btn-save-manager');
+    if(saveManagerBtn) saveManagerBtn.onclick = ()=>{
+      if(window.SaveManager && typeof window.SaveManager.openSavePanel === 'function') window.SaveManager.openSavePanel();
+      else alert('存档模块未加载，请刷新页面');
     };
     
     const actionEvictBtn = document.getElementById('action-evict');

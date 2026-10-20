@@ -258,8 +258,10 @@
     <p class="menu-subtitle">&lt;OI Coach Simulator&gt;</p>
     <p class="menu-flavor">二NOIP，你被黄紫黑黑创飞原地AFO。一觉醒来，你发现你坐在机房前，成为了你们学校信息学竞赛的总教练。回想起之前构造题没checker，模拟赛没大样例，一个月没有半天假期的训练生活。你决定要改变这一切。</p>
     <div class="menu-btn-wrap"><a href="start.html" class="menu-btn primary">开始游戏</a></div>
-    <div class="menu-btn-wrap"><button class="menu-btn" disabled title="即将推出">成  就</button></div>
-    <div class="menu-btn-wrap"><button class="menu-btn" disabled title="即将推出">清除存档</button></div>
+    <div class="menu-btn-wrap"><button class="menu-btn" id="menu-achievements">成  就</button></div>
+    <div class="menu-btn-wrap"><button class="menu-btn" id="menu-runs">游戏记录</button></div>
+    <div class="menu-btn-wrap"><button class="menu-btn" id="menu-saves">存档管理</button></div>
+    <div class="menu-btn-wrap"><button class="menu-btn" id="menu-clear">清除数据</button></div>
   </div>
   <div class="menu-right">
     <div class="changelog-panel" id="changelog-panel">
@@ -270,6 +272,34 @@
   <footer class="menu-footer">
     作者 @Dreamers-seve · 洛谷: <a href="https://www.luogu.com.cn/user/668972" target="_blank" rel="noopener">https://www.luogu.com.cn/user/668972</a> · GitHub: <a href="https://github.com/seve42/OItrainer" target="_blank" rel="noopener">https://github.com/seve42/OItrainer</a>
   </footer>
+
+  <script src="lib/achievements.js"></script>
+  <script src="lib/saves.js"></script>
+  <script>
+    // 主菜单按钮：成就 / 游戏记录 / 存档管理 / 清除数据
+    (function(){
+      function on(id, fn){
+        var el = document.getElementById(id);
+        if(el) el.addEventListener('click', fn);
+      }
+      on('menu-achievements', function(){
+        if(window.AchievementManager) AchievementManager.openPanel();
+      });
+      on('menu-runs', function(){
+        if(window.SaveManager) SaveManager.openRunsPanel();
+      });
+      on('menu-saves', function(){
+        if(window.SaveManager) SaveManager.openSavePanel();
+      });
+      on('menu-clear', function(){
+        if(!window.SaveManager) return;
+        if(confirm('确定要清除所有数据吗？\n将删除：当前存档、成就记录、游戏记录（分享链接列表）。\n此操作不可恢复，建议先在「存档管理」中导出存档备份。')){
+          SaveManager.clearAll();
+          alert('已清除存档、成就与游戏记录');
+        }
+      });
+    })();
+  </script>
 
   <!-- 斜向代码雨动画（canvas + requestAnimationFrame，限帧25fps，CSS旋转实现斜向） -->
   <script>

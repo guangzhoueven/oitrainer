@@ -141,7 +141,10 @@
     </div>
 
   <div class="col panel side-panel" style="flex: 0 0 360px;">
-  <h3 style="margin-top:0">本周行动（每个行动持续1周）</h3>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+    <h3 style="margin-top:0">本周行动（每个行动持续1周）</h3>
+    <button type="button" class="btn" id="btn-save-manager" style="padding:4px 10px;font-size:12px;white-space:nowrap;">存档管理</button>
+  </div>
       <div class="action-cards">
         <div class="action-card" id="action-train" role="button" tabindex="0">
           <div class="card-title">训练</div>
@@ -205,6 +208,8 @@
 <script src="lib/contest-ui.js"></script>
 <script src="lib/contest-integration.js"></script>
 <script src="lib/national-team.js"></script>
+<script src="lib/achievements.js"></script>
+<script src="lib/saves.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 <script src="game.js"></script>
 <script src="render.js"></script>
