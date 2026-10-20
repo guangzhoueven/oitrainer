@@ -348,6 +348,8 @@ function renderAll(){
     }
   }catch(e){ /* ignore */ }
   $('header-reputation').innerText = `声誉: ${game.reputation}`;
+  // 教练等级按钮随渲染刷新（lib/coach.js）
+  try{ if(window.CoachManager && window.CoachManager.refreshButton) window.CoachManager.refreshButton(); }catch(e){ /* ignore */ }
   $('info-week').innerText = currWeek();
     const infoWeekEl = $('info-week'); if(infoWeekEl) infoWeekEl.innerText = currWeek();
     const tempText = game.temperature.toFixed(1) + "\u00b0C";

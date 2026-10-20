@@ -236,6 +236,9 @@ function calculateTrainingPressure(task, intensity) {
       }
       
       const studentAbility = (s.thinking + s.coding) / 2.0;
+      // 教练技能加成（lib/coach.js）：预览用与实际结算同一套倍率
+      let coachPressureMul = 1.0;
+      try{ if(window.CoachManager) coachPressureMul = CoachManager.pressureMul(game); }catch(e){}
       let base_pressure = (intensity===1) ? 15 : (intensity===2) ? 25 : 40;
       
       const difficultyPressure = Math.max(0, (task.difficulty - studentAbility) * 0.2);
@@ -249,13 +252,13 @@ function calculateTrainingPressure(task, intensity) {
       
       pressure_increase *= (typeof PRESSURE_INCREASE_MULTIPLIER !== 'undefined' ? PRESSURE_INCREASE_MULTIPLIER : 1.0);
       
-      // 考虑天赋的压力修正（预览走 triggerTalentsForPreview：无副作用、且随机类天赋不触发）
-      let finalPressureIncrease = pressure_increase;
+      // 教练技能：从容训练降低训练压力（预览与实际结算保持一致）
+      let finalPressureIncrease = pressure_increase * coachPressureMul;
       try{
         if(typeof s.triggerTalents === 'function'){
           const talentResults = triggerTalentsForPreview(s, 'pressure_change', { 
             source: 'task_training', 
-            amount: pressure_increase, 
+            amount: finalPressureIncrease, 
             task: task, 
             intensity: intensity,
             preview: true  // 标记为预览模式：随机类天赋（摸鱼大师、厌学等）不触发，保证提示文案稳定
@@ -378,6 +381,16 @@ function trainStudentsWithTask(task, intensity) {
     let rejectTraining = false;
     let finalPressureIncrease = 0;
     
+    // 教练技能加成（lib/coach.js）：高效训练提升增益，从容训练降低压力
+    let coachGainMul = 1.0;
+    let coachPressureMul = 1.0;
+    try{
+      if(window.CoachManager){
+        coachGainMul = CoachManager.gainMul(game);
+        coachPressureMul = CoachManager.pressureMul(game);
+      }
+    }catch(e){ console.error('coach gain/pressure mul', e); }
+    
     let base_pressure = (intensity===1) ? 15 : (intensity===2) ? 25 : 40;
     
     const difficultyPressure = Math.max(0, (task.difficulty - studentAbility) * 0.2);
@@ -391,12 +404,12 @@ function trainStudentsWithTask(task, intensity) {
     
     pressure_increase *= (typeof PRESSURE_INCREASE_MULTIPLIER !== 'undefined' ? PRESSURE_INCREASE_MULTIPLIER : 1.0);
     
-    finalPressureIncrease = pressure_increase;
+    finalPressureIncrease = pressure_increase * coachPressureMul;
     try{
       if(typeof s.triggerTalents === 'function'){
         const talentResults = s.triggerTalents('pressure_change', { 
           source: 'task_training', 
-          amount: pressure_increase, 
+          amount: finalPressureIncrease, 
           task: task, 
           intensity: intensity 
         }) || [];
@@ -434,7 +447,7 @@ function trainStudentsWithTask(task, intensity) {
     // 应用知识点增加：基础效率加成 + 资料库加成 + 强度系数 + 生病惩罚（+ 天赋修正）
     for(const boost of results.boosts) {
       // 计算总的知识点增加（包含所有加成因素）
-      let totalBoost = boost.actualAmount * libraryMultiplier * intensityFactor * sick_penalty * talentGainRatio * knowledgeGainRatio;
+      let totalBoost = boost.actualAmount * libraryMultiplier * intensityFactor * sick_penalty * talentGainRatio * knowledgeGainRatio * coachGainMul;
       if(rejectTraining) totalBoost = 0;
       totalBoost = Math.floor(totalBoost);
       s.addKnowledge(boost.type, totalBoost);
@@ -822,6 +835,9 @@ function weeklyUpdate(weeks=1){
     
     let pressure_recovery = RECOVERY_RATE * (personalComfort/100.0) * weeks;
     
+    // 教练技能：张弛有度提高每周压力恢复
+    try{ if(window.CoachManager) pressure_recovery += CoachManager.recoveryBonus(game) * weeks; }catch(e){}
+    
     if(s.talents && s.talents.has('乐天派')){
       pressure_recovery += 3 * weeks;
     }
@@ -837,8 +853,22 @@ function weeklyUpdate(weeks=1){
   }
   for(let i=0;i<weeks;i++){
     const weeklyRaw = game.getWeeklyCost();
-    const weeklyAdj = Math.round(weeklyRaw * (game.getExpenseMultiplier ? game.getExpenseMultiplier() : 1));
+    // 教练技能：维护优化降低周维护费，争取赞助每周固定进账
+    let coachUpkeepMul = 1, coachWeeklyFund = 0;
+    try{
+      if(window.CoachManager){
+        coachUpkeepMul = CoachManager.upkeepMul(game);
+        coachWeeklyFund = CoachManager.weeklyFund(game);
+      }
+    }catch(e){ console.error('coach upkeep/fund', e); }
+    const weeklyAdj = Math.round(weeklyRaw * (game.getExpenseMultiplier ? game.getExpenseMultiplier() : 1) * coachUpkeepMul);
     game.recordExpense(weeklyAdj, '周维护费用');
+    if(coachWeeklyFund > 0){
+      game.budget += coachWeeklyFund;
+      try{ if(typeof log === 'function') log('[教练] 争取赞助 +' + coachWeeklyFund); }catch(e){}
+    }
+    // 教练成长：每周带队经验
+    try{ if(window.CoachManager) CoachManager.addExp(game, 10, '每周带队'); }catch(e){}
     game.week++;
     game.updateWeather();
     
@@ -1503,6 +1533,13 @@ window.onload = ()=>{
       if(window.SaveManager && typeof window.SaveManager.openSavePanel === 'function') window.SaveManager.openSavePanel();
       else alert('存档模块未加载，请刷新页面');
     };
+    // 教练成长入口：查看等级、经验与技能分配
+    const coachBtn = document.getElementById('btn-coach');
+    if(coachBtn) coachBtn.onclick = ()=>{
+      if(window.CoachManager && typeof window.CoachManager.openPanel === 'function') window.CoachManager.openPanel();
+      else alert('教练模块未加载，请刷新页面');
+    };
+    try{ if(window.CoachManager && window.CoachManager.refreshButton) window.CoachManager.refreshButton(); }catch(e){}
     
     const actionEvictBtn = document.getElementById('action-evict');
     if(actionEvictBtn) actionEvictBtn.onclick = ()=>{
