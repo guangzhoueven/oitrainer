@@ -1476,26 +1476,6 @@ function renderEndSummary(){
           { name: 'NOI', week: 42 }
         ];
 
-      // 结算页进度条要能看到 IOI：国家集训队赛事（CTT/CTS/IOI）不在上面的常规赛程里，这里补上 IOI 终点里程碑。
-      // 周次优先取真实打过的 IOI；没打过则按集训队链路推算（NOI 后 +2/+3/+4 周为 CTT、CTS，CTS 后 +1 周为 IOI）
-      try{
-        if(!competitions.some(c => c && c.name === 'IOI')){
-          const careerList = (o.careerCompetitions && Array.isArray(o.careerCompetitions)) ? o.careerCompetitions : [];
-          const careerIOI = careerList.find(c => c && c.name === 'IOI');
-          const careerCTS = careerList.find(c => c && c.name === 'CTS');
-          const noiWeeks = competitions.filter(c => c && c.name === 'NOI').map(c => Number(c.week) || 0);
-          for(const c of careerList){ if(c && c.name === 'NOI') noiWeeks.push(Number(c.week) || 0); }
-          const lastNOIWeek = noiWeeks.length ? Math.max.apply(null, noiWeeks) : 0;
-          const lastWeekBeforeIOI = competitions.reduce((m, c) => Math.max(m, Number(c && c.week) || 0), 0);
-          const ioiWeek = (careerIOI && Number(careerIOI.week)) ? Number(careerIOI.week)
-            : (careerCTS && Number(careerCTS.week)) ? (Number(careerCTS.week) + 1)
-            : lastNOIWeek ? (lastNOIWeek + 5)
-            : (lastWeekBeforeIOI + 1);
-          competitions.push({ name: 'IOI', week: ioiWeek, nationalTeam: true, ioiMilestone: true });
-          competitions.sort((a, b) => (Number(a.week) || 0) - (Number(b.week) || 0));
-        }
-      }catch(e){ console.error('时间轴补 IOI 失败', e); }
-
       const lastCompWeek = competitions.length ? Math.max(...competitions.map(c => Number(c.week) || 0)) : 0;
       const maxWeeks = Math.max(week, lastCompWeek, typeof SEASON_WEEKS !== 'undefined' ? SEASON_WEEKS : 40);
       
