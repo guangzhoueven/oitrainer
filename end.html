@@ -94,7 +94,7 @@
     <h3>最终结果</h3>
     <div id="end-summary" class="small muted">正在加载结算数据……</div>
     <div class="modal-actions" style="margin-top:16px">
-      <a class="btn" id="end-home" href="index.html" style="background:#455a64;color:white;text-decoration:none;padding:10px 20px;border-radius:6px;">返回首页</a>
+      <button class="btn" id="end-home" style="background:#2b6cb0;color:white;">返回首页</button>
       <button class="btn btn-ghost" id="end-back">回到开始</button>
       <button class="btn" id="end-share" style="background:#2b6cb0;color:white;">分享结果</button>
       <button class="btn" id="end-playagain">再玩一次</button>
@@ -116,6 +116,7 @@
 <script src="render.js"></script>
 <script src="debug.js"></script>
 <script>
+  document.getElementById('end-home').onclick = ()=>{ window.location.href = 'index.html'; };
   document.getElementById('end-back').onclick = ()=>{ window.location.href = 'start.html'; };
   document.getElementById('end-playagain').onclick = ()=>{ 
     try{
