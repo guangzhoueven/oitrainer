@@ -172,6 +172,9 @@ function handleEventChoice(event) {
 
   renderEventCards();
   safeRenderAll();
+  // 事件选择改变了学生状态（压力/知识/声誉等）但不推进周数，
+  // 这里补一次存档，避免玩家处理完事件后刷新页面导致选择结果丢失（静默，失败不弹窗）
+  try{ saveGame(true); }catch(e){ console.warn('handleEventChoice autosave failed', e); }
 }
 
 // 预览用天赋触发：触发前后对学生状态做快照与还原，
@@ -958,6 +961,10 @@ function weeklyUpdate(weeks=1){
   
   // 成就检查（每周结算后；内部全程 try/catch，绝不影响游戏本体）
   try{ if(window.AchievementManager) window.AchievementManager.check(game); }catch(e){}
+  
+  // 每周结算后自动存档：训练/娱乐/模拟赛/集训/放假都经由 weeklyUpdate 推进，
+  // 这里补一次存档可保证刷新或关闭页面后进度不丢失（silent=true：失败只记日志，不弹窗阻断回合推进）
+  try{ saveGame(true); }catch(e){ console.warn('weeklyUpdate autosave failed', e); }
 
   renderAll();
 }
@@ -1176,6 +1183,8 @@ function evictSingle(idx){
   game.reputation -= EVICT_REPUTATION_COST;
   if(game.reputation < 0) game.reputation = 0;
   log(`劝退学生 ${student.name}，声誉 -${EVICT_REPUTATION_COST}`);
+  // 劝退不推进周数，weeklyUpdate 不会自动存档，这里单独保存一次（静默，失败不弹窗）
+  try{ saveGame(true); }catch(e){ console.warn('evictSingle autosave failed', e); }
   renderAll();
   try{ 
     if(typeof window !== 'undefined' && window.__OI_DEBUG_ENDING) console.debug('[ENDING DEBUG] after evict, calling checkAndTriggerEnding()');
@@ -1515,6 +1524,15 @@ window.onload = ()=>{
       }
       
       try{ localStorage.setItem('oi_coach_save', serializeGameState()); }catch(e){}
+      
+      // 开局成功后清掉 URL 上的 new=1 等参数。
+      // 否则刷新页面时上面的 qs.get('new')==='1' 分支会再次命中，直接 initGame() 新建一局，
+      // 玩家已有的进度（学生压力/知识等）会被整局覆盖丢失。
+      try{
+        if(window.history && typeof window.history.replaceState === 'function'){
+          window.history.replaceState(null, '', 'game.html');
+        }
+      }catch(e){ console.warn('replaceState failed', e); }
     } else {
       const ok = silentLoad();
       if(!ok){ window.location.href = 'start.html'; return; }
