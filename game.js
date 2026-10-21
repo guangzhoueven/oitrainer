@@ -1313,6 +1313,12 @@ function startFromStartPage(){
   }
   let count = clampInt(parseInt(document.getElementById('start-stu').value),3,10);
   
+  // 西藏(33)与台湾同样无法参加NOI，禁止新开局选中
+  if(parseInt(prov) === 33){
+    try{ alert('该区域选手无法参加NOI，请重新选择省份'); }catch(e){}
+    return;
+  }
+  
   try {
     sessionStorage.setItem('oi_game_active_session', 'true');
   } catch(e) {
@@ -1475,7 +1481,12 @@ window.onload = ()=>{
     const qs = (function(){ try{ return new URLSearchParams(window.location.search); }catch(e){ return null; } })();
     if(qs && qs.get('new') === '1'){
       const diff = clampInt(parseInt(qs.get('d')||2),1,3);
-      const prov = clampInt(parseInt(qs.get('p')||1),1,Object.keys(PROVINCES).length);
+      let prov = clampInt(parseInt(qs.get('p')||1),1,Object.keys(PROVINCES).length);
+      // 西藏(33)与台湾同样无法参加NOI，禁止新开局选中（存档读取不受影响）
+      if(prov === 33){
+        console.warn('[开局] 西藏该区域选手无法参加NOI，已回退为默认省份');
+        prov = 1;
+      }
       const count = clampInt(parseInt(qs.get('c')||5),3,10);
       
       const isDaily = qs.get('daily') === '1';
